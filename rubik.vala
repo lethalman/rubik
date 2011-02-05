@@ -1,6 +1,8 @@
 using Clutter;
 using Cogl;
 
+Controller controller;
+
 enum FaceNormal
   {
     FRONT,
@@ -8,7 +10,7 @@ enum FaceNormal
     LEFT,
     RIGHT,
     TOP,
-      BOTTOM;
+    BOTTOM;
 
     public FaceNormal rotate_x (FaceNormal reference)
     {
@@ -124,8 +126,8 @@ class MiniFace : Rectangle
 {
   public FaceNormal normal;
   public FaceColor face_color;
-  public MiniCube mini_cube { get { return (MiniCube) get_parent(); } }
-  public Cube cube { get { return mini_cube.cube; } }
+  public weak MiniCube mini_cube { get { return (MiniCube) get_parent(); } }
+  public weak Cube cube { get { return mini_cube.cube; } }
 
   public MiniFace (FaceNormal normal, FaceColor color)
   {
@@ -133,6 +135,13 @@ class MiniFace : Rectangle
     this.face_color = color;
     this.normal = normal;
     this.reactive = true;
+  }
+
+  public MiniFace.from_json (Json.Node node)
+  {
+    unowned Json.Object object = node.get_object ();
+    this ((FaceNormal) object.get_int_member ("normal"),
+          (FaceColor) object.get_int_member ("color"));
   }
 
   public Actor clone ()
@@ -272,6 +281,16 @@ class MiniFace : Rectangle
 
     cube.queue_relayout ();
   }
+
+  public Json.Node serialize ()
+  {
+    var node = new Json.Node (Json.NodeType.OBJECT);
+    var object = new Json.Object ();
+    object.set_int_member ("normal", normal);
+    object.set_int_member ("color", face_color);
+    node.take_object ((owned) object);
+    return (owned) node;
+  }
 }
 
 class MiniCube : Actor
@@ -281,7 +300,7 @@ class MiniCube : Actor
   public int z_index;
   public MiniFace[] mini_faces;
 
-  public Cube cube { get { return (Cube) get_parent(); } }
+  public weak Cube cube { get { return (Cube) get_parent(); } }
 
   public MiniCube (int x, int y, int z, owned MiniFace[] mini_faces)
   {
@@ -292,6 +311,17 @@ class MiniCube : Actor
       mini_face.set_parent (this);
     this.mini_faces = (owned) mini_faces;
     queue_relayout ();
+  }
+
+  public MiniCube.from_json (Json.Node node)
+  {
+    unowned Json.Object object = node.get_object ();
+    unowned Json.Array array = object.get_array_member ("faces");
+    var mini_faces = new MiniFace[array.get_length ()];
+    for (var i=0; i < array.get_length (); i++)
+      mini_faces[i] = new MiniFace.from_json (array.get_element (i));
+    this ((int) object.get_int_member ("x"), (int) object.get_int_member ("y"), (int) object.get_int_member ("z"),
+          (owned) mini_faces);
   }
 
   public override void allocate (ActorBox box, AllocationFlags flags)
@@ -345,7 +375,6 @@ class MiniCube : Actor
     Cogl.translate (0, 0, 1);
     Cogl.rectangle (0, 0, width, height);
     // bottom face
-    Cogl.rectangle (0, 0, width, height);
     Cogl.translate (0, 0, height-2);
     Cogl.rectangle (0, 0, width, height);
     Cogl.translate (0, 0, 1-height);
@@ -393,6 +422,21 @@ class MiniCube : Actor
     hide ();
     foreach (var mini_face in mini_faces)
       mini_face.hide_all ();
+  }
+
+  public Json.Node serialize ()
+  {
+    var node = new Json.Node (Json.NodeType.OBJECT);
+    var object = new Json.Object ();
+    object.set_int_member ("x", x_index);
+    object.set_int_member ("y", y_index);
+    object.set_int_member ("z", z_index);
+    var array = new Json.Array ();
+    foreach (var mini_face in mini_faces)
+      array.add_element (mini_face.serialize ());
+    object.set_array_member ("faces", array);
+    node.take_object ((owned) object);
+    return (owned) node;
   }
 }
 
@@ -581,6 +625,32 @@ class Cube : Actor
     hide ();
     foreach (var mini_cube in mini_cubes)
       mini_cube.hide_all ();
+  }
+
+  public Json.Node serialize ()
+  {
+    var node = new Json.Node (Json.NodeType.ARRAY);
+    var array = new Json.Array ();
+    foreach (var mini_cube in mini_cubes)
+      array.add_element (mini_cube.serialize ());
+    node.take_array ((owned) array);
+    return (owned) node;
+  }
+
+  public void deserialize (Json.Node node)
+  {
+    unowned Json.Array array = node.get_array ();
+    if (array.get_length () != mini_cubes.length)
+      {
+        warning ("Corrupted file format");
+        return;
+      }
+    for (var i=0; i < array.get_length (); i++)
+      {
+        mini_cubes[i] = new MiniCube.from_json (array.get_element (i));
+        mini_cubes[i].set_parent (this);
+      }
+    queue_relayout ();
   }
 }
 
@@ -867,6 +937,54 @@ class Controller
       }
     return true;
   }
+
+  public void restore ()
+  {
+    try
+      {
+        var homedir = Environment.get_home_dir ();
+        var filename = GLib.Path.build_filename (homedir, ".rubik");
+        if (!FileUtils.test (filename, FileTest.EXISTS))
+          return;
+        var parser = new Json.Parser ();
+        parser.load_from_file (filename);
+        cube.deserialize (parser.get_root ());
+      }
+    catch (GLib.Error e)
+    {
+      warning ("Can't restore game: %s", e.message);
+    }
+  }
+
+  public void save ()
+  {
+    try
+      {
+        var homedir = Environment.get_home_dir ();
+        var filename = GLib.Path.build_filename (homedir, ".rubik");
+        var node = cube.serialize ();
+        var generator = new Json.Generator ();
+        generator.set_root (node);
+        generator.to_file (filename);
+      }
+    catch (GLib.Error e)
+    {
+      warning ("Can't save game: %s", e.message);
+    }
+  }
+}
+
+Json.Node serialize_matrix (Matrix m)
+{
+  var node = new Json.Node (Json.NodeType.ARRAY);
+  var array = new Json.Array ();
+  node.take_array ((owned) array);
+  return (owned) node;
+}
+  
+void quit ()
+{
+  controller.save ();
 }
 
 void main (string[] args) {
@@ -887,8 +1005,17 @@ void main (string[] args) {
   shuffle.anchor_gravity = Gravity.CENTER;
   shuffle.set_position (stage.width-50, stage.height-30);
   stage.add (shuffle);
-  var controller = new Controller (cube, shuffle);
+
+  controller = new Controller (cube, shuffle);
+  controller.restore ();
+  Process.signal (ProcessSignal.HUP, quit);
+  Process.signal (ProcessSignal.INT, quit);
+  Process.signal (ProcessSignal.QUIT, quit);
+  Process.signal (ProcessSignal.KILL, quit);
+  Process.signal (ProcessSignal.TERM, quit);
 
   stage.show ();
   Clutter.main ();
+
+  quit ();
 }
