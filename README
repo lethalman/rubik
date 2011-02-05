@@ -2,6 +2,9 @@ Rubik 3D game is the Rubik Cube game ported to your desktop using
 Clutter and Vala. This program is released under the terms of the
 GNU General Public License, see the file `COPYING' for more information.
 
+You can find up-to-date source code for Rubik at:
+http://gitorious.org/lethal-works/rubik
+
 Type `make' to compile then `./rubik' to start playing.
 
 USAGE
