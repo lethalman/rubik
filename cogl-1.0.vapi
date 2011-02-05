@@ -356,7 +356,7 @@ namespace Cogl {
 		public uint type;
 		public uint flags;
 		public static bool equal (void* v1, void* v2);
-		public Matrix.from_array (float[] array);
+		public Matrix.from_array ([CCode (array_length = false)] float[] array);
 		public void frustum (float left, float right, float bottom, float top, float z_near, float z_far);
 		[CCode (array_length = false)]
 		public unowned float[] get_array ();

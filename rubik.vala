@@ -485,43 +485,14 @@ class Cube : Actor
 
   public void shuffle ()
   {
-    var colors = new FaceColor[9*6];
-    colors[0] = (FaceColor) 0;
-    for (int i=1; i < colors.length; i++)
+    foreach (var mini_cube in mini_cubes)
       {
-        var j = rand.int_range (0, i);
-        colors[i] = colors[j];
-        colors[j] = (FaceColor) i % 6;
-      }
-    mini_cubes = new MiniCube[3*3*3];
-    int randcolor = 0;
-    for (int x=0; x < 3; x++)
-      {
-        for (int y=0; y < 3; y++)
+        foreach (var mini_face in mini_cube.mini_faces)
           {
-            for (int z=0; z < 3; z++)
-              {
-                var mini_faces = new MiniFace[0];
-                if (x == 0)
-                  mini_faces += new MiniFace (FaceNormal.LEFT, colors[randcolor++]);
-                if (y == 0)
-                  mini_faces += new MiniFace (FaceNormal.TOP, colors[randcolor++]);
-                if (z == 0)
-                  mini_faces += new MiniFace (FaceNormal.FRONT, colors[randcolor++]);
-                if (x == 2)
-                  mini_faces += new MiniFace (FaceNormal.RIGHT, colors[randcolor++]);
-                if (y == 2)
-                  mini_faces += new MiniFace (FaceNormal.BOTTOM, colors[randcolor++]);
-                if (z == 2)
-                  mini_faces += new MiniFace (FaceNormal.BACK, colors[randcolor++]);
-
-                var mini_cube = new MiniCube (x, y, z, (owned) mini_faces);
-                mini_cube.set_parent (this);
-                mini_cubes[x+y*3+z*9] = mini_cube;
-              }
+            mini_face.rotate_x (rand.int_range (0, 4));
+            mini_face.rotate_y (rand.int_range (0, 4));
           }
       }
-    queue_relayout ();
   }
 
   public override void apply_transform (ref Matrix matrix)
@@ -629,17 +600,21 @@ class Cube : Actor
 
   public Json.Node serialize ()
   {
-    var node = new Json.Node (Json.NodeType.ARRAY);
+    var node = new Json.Node (Json.NodeType.OBJECT);
+    var object = new Json.Object ();
     var array = new Json.Array ();
     foreach (var mini_cube in mini_cubes)
       array.add_element (mini_cube.serialize ());
-    node.take_array ((owned) array);
+    object.set_array_member ("cubes", array);
+    object.set_member ("rotation", serialize_matrix (rotation_matrix));
+    node.take_object ((owned) object);
     return (owned) node;
   }
 
   public void deserialize (Json.Node node)
   {
-    unowned Json.Array array = node.get_array ();
+    unowned Json.Object object = node.get_object ();
+    unowned Json.Array array = object.get_array_member ("cubes");
     if (array.get_length () != mini_cubes.length)
       {
         warning ("Corrupted file format");
@@ -650,6 +625,8 @@ class Cube : Actor
         mini_cubes[i] = new MiniCube.from_json (array.get_element (i));
         mini_cubes[i].set_parent (this);
       }
+    unowned Json.Node rotation = object.get_member ("rotation");
+    rotation_matrix = deserialize_matrix (rotation);
     queue_relayout ();
   }
 }
@@ -689,11 +666,11 @@ class Controller
     if (event.keyval == 'a')
       cube.rotation_axis = Vertex(){x=0, y=-1, z=0};
     else if (event.keyval == 'w')
-      cube.rotation_axis = Vertex(){x=-1, y=0, z=0};
+      cube.rotation_axis = Vertex(){x=1, y=0, z=0};
     else if (event.keyval == 'd')
       cube.rotation_axis = Vertex(){x=0, y=1, z=0};
     else if (event.keyval == 's')
-      cube.rotation_axis = Vertex(){x=1, y=0, z=0};
+      cube.rotation_axis = Vertex(){x=-1, y=0, z=0};
     else if (event.keyval == 'q')
       cube.rotation_axis = Vertex(){x=0, y=0, z=-1};
     else if (event.keyval == 'e')
@@ -714,7 +691,12 @@ class Controller
       {
         var face = event.stage.get_actor_at_pos (PickMode.REACTIVE, (int) event.x, (int) event.y) as MiniFace;
         if (face == null)
-          return false;
+          {
+            // allow rotation
+            this.button = 0;
+            pressed = true;
+            return true;
+          }
         this.face = face;
         clone = face.clone ();
         clone.transform_stage_point (event.x, event.y, out orig_actor_x, out orig_actor_y);
@@ -978,8 +960,39 @@ Json.Node serialize_matrix (Matrix m)
 {
   var node = new Json.Node (Json.NodeType.ARRAY);
   var array = new Json.Array ();
+  // use strings, json 0.10 bug
+  array.add_string_element (m.xx.to_string ());
+  array.add_string_element (m.yx.to_string ());
+  array.add_string_element (m.zx.to_string ());
+  array.add_string_element (m.wx.to_string ());
+  array.add_string_element (m.xy.to_string ());
+  array.add_string_element (m.yy.to_string ());
+  array.add_string_element (m.zy.to_string ());
+  array.add_string_element (m.wy.to_string ());
+  array.add_string_element (m.xz.to_string ());
+  array.add_string_element (m.yz.to_string ());
+  array.add_string_element (m.zz.to_string ());
+  array.add_string_element (m.wz.to_string ());
+  array.add_string_element (m.xw.to_string ());
+  array.add_string_element (m.yw.to_string ());
+  array.add_string_element (m.zw.to_string ());
+  array.add_string_element (m.ww.to_string ());
   node.take_array ((owned) array);
   return (owned) node;
+}
+
+Matrix deserialize_matrix (Json.Node node)
+{
+  unowned Json.Array array = node.get_array ();
+  if (array.get_length () != 16)
+    {
+      warning ("Corrupted file format");
+      return Matrix.identity ();
+    }
+  var values = new float[16];
+  for (var i=0; i < 16; i++)
+    values[i] = (float) array.get_string_element (i).to_double ();
+  return Matrix.from_array (values);
 }
   
 void quit ()
