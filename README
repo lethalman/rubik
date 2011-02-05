@@ -1,0 +1,12 @@
+Rubik 3D game is the Rubik Cube game ported to your desktop using
+Clutter and Vala. This program is released under the terms of the
+GNU General Public License, see the file `COPYING' for more information.
+
+Type `make' to compile then `./rubik' to start playing.
+
+USAGE
+- To rotate a cube slice click on a face and move the mouse.
+- To rotate the view either right click, click outside
+  the cube or keep SHIFT pressed.
+- To rotate the cube around itself press either `a', `q', `w', `e', `d'
+  or `s'
