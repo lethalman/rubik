@@ -402,19 +402,9 @@ class Cube : Actor
   public Matrix rotation_matrix = Matrix.identity ();
   public Vertex rotation_axis;
   private float _rotation_axis_angle;
-  public float rotation_axis_angle {
-    get { return _rotation_axis_angle; }
-    set {
-      if (!inhibit_axis_rotation)
-        {
-          _rotation_axis_angle = value;
-          queue_redraw ();
-        }
-      else
-        inhibit_axis_rotation = false;
-    }
-  }
-  public bool inhibit_axis_rotation = false;
+  public float rotation_axis_angle { get { return _rotation_axis_angle; } set { _rotation_axis_angle = value; queue_redraw (); } }
+  private float _rotation_axis_angle_after;
+  public float rotation_axis_angle_after { get { return _rotation_axis_angle_after; } set { _rotation_axis_angle_after = value; queue_redraw (); } }
   public Rand rand = new Rand.with_seed ((int32) time_t ());
 
   construct
@@ -495,15 +485,13 @@ class Cube : Actor
     base.apply_transform (ref matrix);
     // can't use euler angles, looks like clutter has some other strange convention
     var m = Matrix.identity ();
-    if (_rotation_axis_angle != 0 && !inhibit_axis_rotation)
-      {
-        m.translate (width/2, height/2, -width/2);
-        m.rotate (_rotation_axis_angle, rotation_axis.x, rotation_axis.y, rotation_axis.z);
-        m.translate (-width/2, -height/2, width/2);
-      }
-    else
-      inhibit_axis_rotation = false;
+    m.translate (width/2, height/2, -width/2);
+    m.rotate (_rotation_axis_angle, rotation_axis.x, rotation_axis.y, rotation_axis.z);
+    m.translate (-width/2, -height/2, width/2);
     m = Matrix.multiply (m, rotation_matrix);
+    m.translate (width/2, height/2, -width/2);
+    m.rotate (_rotation_axis_angle_after, rotation_axis.x, rotation_axis.y, rotation_axis.z);
+    m.translate (-width/2, -height/2, width/2);
     matrix = Matrix.multiply (matrix, m);
   }
 
@@ -514,9 +502,12 @@ class Cube : Actor
     m.rotate (_rotation_axis_angle, rotation_axis.x, rotation_axis.y, rotation_axis.z);
     m.translate (-width/2, -height/2, width/2);
     m = Matrix.multiply (m, rotation_matrix);    
+    m.translate (width/2, height/2, -width/2);
+    m.rotate (_rotation_axis_angle_after, rotation_axis.x, rotation_axis.y, rotation_axis.z);
+    m.translate (-width/2, -height/2, width/2);
     rotation_matrix = m;
-    inhibit_axis_rotation = true;
     _rotation_axis_angle = 0;
+    _rotation_axis_angle_after = 0;
   }
 
   public override void allocate (ActorBox box, AllocationFlags flags)
@@ -626,43 +617,21 @@ class Controller
   {
     // a=97, w=119, d=100, s=115
     if (event.keyval == 'a')
-      {
-        cube.rotation_axis = Vertex(){x=0, y=1, z=0};
-        cube.animate (AnimationMode.LINEAR, 100, "rotation-axis-angle", -90.0).completed.connect (() => cube.save_rotation ());
-        return true;
-      }
+      cube.rotation_axis = Vertex(){x=0, y=-1, z=0};
     else if (event.keyval == 'w')
-      {
-        cube.rotation_axis = Vertex(){x=1, y=0, z=0};
-        cube.animate (AnimationMode.LINEAR, 100, "rotation-axis-angle", -90.0).completed.connect (() => cube.save_rotation ());
-        return true;
-      }
+      cube.rotation_axis = Vertex(){x=-1, y=0, z=0};
     else if (event.keyval == 'd')
-      {
-        cube.rotation_axis = Vertex(){x=0, y=1, z=0};
-        cube.animate (AnimationMode.LINEAR, 100, "rotation-axis-angle", 90.0).completed.connect (() => cube.save_rotation ());
-        return true;
-      }
+      cube.rotation_axis = Vertex(){x=0, y=1, z=0};
     else if (event.keyval == 's')
-      {
-        cube.rotation_axis = Vertex(){x=1, y=0, z=0};
-        cube.animate (AnimationMode.LINEAR, 100, "rotation-axis-angle", 90.0).completed.connect (() => cube.save_rotation ());
-        return true;
-      }
+      cube.rotation_axis = Vertex(){x=1, y=0, z=0};
     else if (event.keyval == 'q')
-      {
-        cube.rotation_axis = Vertex(){x=0, y=0, z=1};
-        cube.animate (AnimationMode.LINEAR, 100, "rotation-axis-angle", -90.0).completed.connect (() => cube.save_rotation ());
-        return true;
-      }
+      cube.rotation_axis = Vertex(){x=0, y=0, z=-1};
     else if (event.keyval == 'e')
-      {
-        cube.rotation_axis = Vertex(){x=0, y=0, z=1};
-        cube.rotation_axis_angle = 0;
-        cube.animate (AnimationMode.LINEAR, 100, "rotation-axis-angle", 90.0).completed.connect (() => cube.save_rotation ());
-        return true;
-      }    
-    return false;
+      cube.rotation_axis = Vertex(){x=0, y=0, z=1};
+    else
+      return false;
+    cube.animate (AnimationMode.LINEAR, 100, "rotation-axis-angle-after", 90.0).completed.connect_after (() => cube.save_rotation ());
+    return true;
   }
 
   public bool on_button_press_event (ButtonEvent event)
@@ -723,9 +692,9 @@ class Controller
     timeline.start ();
     var rot_times = rotation_times;
     if (is_x_rotation)
-      timeline.completed.connect (() => face.rotate_x (rot_times));
+      timeline.completed.connect_after (() => face.rotate_x (rot_times));
     else
-      timeline.completed.connect (() => face.rotate_y (rot_times));
+      timeline.completed.connect_after (() => face.rotate_y (rot_times));
     cubes = null;
     rotation_times = 0;
     return true;
