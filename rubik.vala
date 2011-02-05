@@ -663,7 +663,12 @@ class Controller
   public bool on_key_press_event (KeyEvent event)
   {
     // a=97, w=119, d=100, s=115
-    if (event.keyval == 'a')
+    if (event.keyval == 65307) // ESC
+      {
+        cube.rotation_matrix = Matrix.identity ();
+        cube.queue_redraw ();
+      }
+    else if (event.keyval == 'a')
       cube.rotation_axis = Vertex(){x=0, y=-1, z=0};
     else if (event.keyval == 'w')
       cube.rotation_axis = Vertex(){x=1, y=0, z=0};
