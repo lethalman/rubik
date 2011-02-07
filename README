@@ -13,3 +13,4 @@ USAGE
   the cube or keep SHIFT pressed.
 - To rotate the cube around itself press either `a', `q', `w', `e', `d'
   or `s'
+- Press ESC to reset rotation

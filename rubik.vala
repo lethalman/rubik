@@ -688,6 +688,7 @@ class Controller
       {
         cube.rotation_matrix = Matrix.identity ();
         cube.queue_redraw ();
+        return true;
       }
     else if (event.keyval == 'a')
       cube.rotation_axis = Vertex(){x=0, y=-1, z=0};
