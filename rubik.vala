@@ -1031,6 +1031,7 @@ void quit ()
 void main (string[] args) {
   Clutter.init (ref args);
   unowned Stage stage = Stage.get_default ();
+  stage.title = "Rubik 1.0";
   var c = Clutter.Color ();
   c.red = 0x18; c.green = 0x18; c.blue = 0x18; c.alpha = 0xff;
   stage.color = c;
