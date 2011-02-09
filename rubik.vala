@@ -1025,6 +1025,7 @@ Matrix deserialize_matrix (Json.Node node)
 void quit ()
 {
   controller.save ();
+  Process.exit (0);
 }
 
 void main (string[] args) {
