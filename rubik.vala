@@ -248,6 +248,9 @@ class MiniFace : Rectangle
   // clockwise rotation
   public void rotate_x (int times)
   {
+    if (times == 0)
+      return;
+
     MiniCube[] cubes = get_x_cubes ();
     var orig_normal = normal;
     for (int time = 0; time < times; time++)
@@ -271,12 +274,16 @@ class MiniFace : Rectangle
           }
       }
 
+    cube.slice_moved ();
     cube.queue_relayout ();
   }
 
   // clockwise rotation
   public void rotate_y (int times)
   {
+    if (times == 0)
+      return;
+
     MiniCube[] cubes = get_y_cubes ();
     var orig_normal = normal;
     for (int time = 0; time < times; time++)
@@ -300,6 +307,7 @@ class MiniFace : Rectangle
           }
       }
 
+    cube.slice_moved ();
     cube.queue_relayout ();
   }
 
@@ -471,6 +479,8 @@ class Cube : Actor
   private float _rotation_axis_angle_after;
   public float rotation_axis_angle_after { get { return _rotation_axis_angle_after; } set { _rotation_axis_angle_after = value; queue_redraw (); } }
   public Rand rand = new Rand.with_seed ((int32) time_t ());
+
+  public signal void slice_moved ();
 
   construct
   {
@@ -668,17 +678,77 @@ class Controller
   public bool pressed = false;
   public weak Cube cube;
   public weak Stage stage;
+  public weak Text moves;
+  public weak Text time;
+  public int minutes;
+  public int seconds;
+  public int n_moves;
+  public uint timer = 0;
 
-  public Controller (Cube cube, Text shuffle)
+  public Controller (Cube cube, Text shuffle, Text moves, Text time)
   {
     this.cube = cube;
     this.stage = cube.get_stage ();
+    this.moves = moves;
+    this.time = time;
+    this.minutes = 0;
+    this.seconds = 0;
+    this.n_moves = 0;
+
+    cube.slice_moved.connect (slice_moved);
+
     shuffle.reactive = true;
-    shuffle.button_press_event.connect (() => { cube.shuffle (); return true; });
+    shuffle.button_press_event.connect (on_shuffle);
+
     stage.button_press_event.connect (on_button_press_event);
     stage.button_release_event.connect (on_button_release_event);
     stage.key_press_event.connect (on_key_press_event);
     stage.motion_event.connect (on_motion_event);
+  }
+
+  private bool on_shuffle ()
+  {
+    cube.shuffle ();
+    minutes = 0;
+    seconds = 0;
+    n_moves = 0;
+    update_time ();
+    update_moves ();
+    Source.remove (timer);
+    timer = 0;
+    return true;
+  }
+
+  private bool tick ()
+  {
+    seconds++;
+    if (seconds == 60)
+      {
+        seconds = 0;
+        minutes++;
+      }
+    update_time ();
+    return true;
+  }
+
+  private void update_time ()
+  {
+    time.text = "%.2d:%.2d".printf (minutes, seconds);
+    time.queue_redraw ();
+  }
+
+  private void slice_moved ()
+  {
+    if (timer == 0)
+      timer = Timeout.add_seconds (1, tick);
+    n_moves++;
+    update_moves ();
+  }
+
+  private void update_moves ()
+  {
+    moves.text = n_moves.to_string ();
+    moves.queue_relayout ();
   }
 
   public bool on_key_press_event (KeyEvent event)
@@ -957,7 +1027,13 @@ class Controller
           return;
         var parser = new Json.Parser ();
         parser.load_from_file (filename);
-        cube.deserialize (parser.get_root ());
+        unowned Json.Object object = parser.get_root ().get_object ();
+        minutes = (int) object.get_int_member ("minutes");
+        seconds = (int) object.get_int_member ("seconds");
+        update_time ();
+        n_moves = (int) object.get_int_member ("moves");
+        update_moves ();
+        cube.deserialize (object.get_member ("cube"));
       }
     catch (GLib.Error e)
     {
@@ -971,8 +1047,16 @@ class Controller
       {
         var homedir = Environment.get_home_dir ();
         var filename = GLib.Path.build_filename (homedir, ".rubik");
-        var node = cube.serialize ();
+        var cube_node = cube.serialize ();
         var generator = new Json.Generator ();
+        var node = new Json.Node (Json.NodeType.OBJECT);
+        var object = new Json.Object ();
+        object.set_int_member ("minutes", minutes);
+        object.set_int_member ("seconds", seconds);
+        object.set_int_member ("moves", n_moves);
+        object.set_member ("cube", (owned) cube_node);
+
+        node.take_object ((owned) object);
         generator.set_root (node);
         generator.to_file (filename);
       }
@@ -988,22 +1072,22 @@ Json.Node serialize_matrix (Matrix m)
   var node = new Json.Node (Json.NodeType.ARRAY);
   var array = new Json.Array ();
   // use strings, json 0.10 bug
-  array.add_string_element (m.xx.to_string ());
-  array.add_string_element (m.yx.to_string ());
-  array.add_string_element (m.zx.to_string ());
-  array.add_string_element (m.wx.to_string ());
-  array.add_string_element (m.xy.to_string ());
-  array.add_string_element (m.yy.to_string ());
-  array.add_string_element (m.zy.to_string ());
-  array.add_string_element (m.wy.to_string ());
-  array.add_string_element (m.xz.to_string ());
-  array.add_string_element (m.yz.to_string ());
-  array.add_string_element (m.zz.to_string ());
-  array.add_string_element (m.wz.to_string ());
-  array.add_string_element (m.xw.to_string ());
-  array.add_string_element (m.yw.to_string ());
-  array.add_string_element (m.zw.to_string ());
-  array.add_string_element (m.ww.to_string ());
+  array.add_string_element (((double) m.xx).to_string ());
+  array.add_string_element (((double) m.yx).to_string ());
+  array.add_string_element (((double) m.zx).to_string ());
+  array.add_string_element (((double) m.wx).to_string ());
+  array.add_string_element (((double) m.xy).to_string ());
+  array.add_string_element (((double) m.yy).to_string ());
+  array.add_string_element (((double) m.zy).to_string ());
+  array.add_string_element (((double) m.wy).to_string ());
+  array.add_string_element (((double) m.xz).to_string ());
+  array.add_string_element (((double) m.yz).to_string ());
+  array.add_string_element (((double) m.zz).to_string ());
+  array.add_string_element (((double) m.wz).to_string ());
+  array.add_string_element (((double) m.xw).to_string ());
+  array.add_string_element (((double) m.yw).to_string ());
+  array.add_string_element (((double) m.zw).to_string ());
+  array.add_string_element (((double) m.ww).to_string ());
   node.take_array ((owned) array);
   return (owned) node;
 }
@@ -1048,7 +1132,15 @@ void main (string[] args) {
   shuffle.set_position (stage.width-50, stage.height-30);
   stage.add (shuffle);
 
-  controller = new Controller (cube, shuffle);
+  var moves = new Text.full ("Helvetica Bold 12", "0", Clutter.Color.from_string ("white"));
+  moves.set_position (5, stage.height-40);
+  stage.add (moves);
+
+  var time = new Text.full ("Helvetica Bold 12", "00:00", Clutter.Color.from_string ("white"));
+  time.set_position (5, stage.height-20);
+  stage.add (time);
+
+  controller = new Controller (cube, shuffle, moves, time);
   controller.restore ();
   Process.signal (ProcessSignal.HUP, quit);
   Process.signal (ProcessSignal.INT, quit);
