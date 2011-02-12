@@ -1,4 +1,4 @@
-/* rubik.vala - Rubik 3D game
+/* rubik.vala - Rubik's Cube 3D game
  *
  * Copyright © 2011  Luca Bruno
  *
@@ -1115,7 +1115,7 @@ void quit ()
 void main (string[] args) {
   Clutter.init (ref args);
   unowned Stage stage = Stage.get_default ();
-  stage.title = "Rubik 1.0";
+  stage.title = "Rubik 1.1";
   var c = Clutter.Color ();
   c.red = 0x18; c.green = 0x18; c.blue = 0x18; c.alpha = 0xff;
   stage.color = c;
